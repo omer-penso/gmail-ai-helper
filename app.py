@@ -4,9 +4,15 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
+from gpt4all import GPT4All
+from tqdm import tqdm
 
 # Load environment variables from .env file
 load_dotenv()
+
+# Initialize GPT4All model
+gpt_model = GPT4All('Meta-Llama-3-8B-Instruct.Q4_0')
+
 
 # Get the path to your credentials.json file
 client_secret_file = os.getenv("CLIENT_SECRET_FILE")
@@ -40,13 +46,15 @@ if client_secret_file:
     results = service.users().messages().list(userId='me', labelIds=['INBOX'], q="newer_than:1d").execute()
     messages = results.get('messages', [])
 
+    # Initialize a list to store email data
+    email_data = []
+
     # If no new messages, print a message
     if not messages:
         print("No new messages.")
     else:
-        print("New messages:")
         # Loop through the messages and fetch the subject and sender
-        for message in messages[:15]:  
+        for message in messages[:8]:  
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
             headers = msg['payload']['headers']
             
@@ -54,7 +62,37 @@ if client_secret_file:
             subject = next(header['value'] for header in headers if header['name'] == 'Subject')
             sender = next(header['value'] for header in headers if header['name'] == 'From')
             
-            print(f"Subject: {subject}")
-            print(f"Sender: {sender}")
+            # Store email data in a list
+            email_data.append({"subject": subject, "sender": sender})
+
+    # Process emails using GPT4All
+    for email in email_data:
+        subject = email["subject"]
+        sender = email["sender"]
+
+        # Define prompts
+        category_prompt = f"Categorize this email by what you think fits the most (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Categories: 'University', 'Work Search', 'Shopping', 'Meetings', 'Other'."
+        priority_prompt = f"Rank this email by priority (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Possible priorities: 'Urgent', 'Important', 'Normal'."
+        response_prompt = f"Does this email require a response? Subject: '{subject}', Sender: '{sender}'. Answer 'Yes' or 'No'."
+
+        # Use GPT4All to generate responses
+        with gpt_model.chat_session() as session:
+            category = session.generate(category_prompt).strip()
+            priority = session.generate(priority_prompt).strip()
+            requires_response = session.generate(response_prompt).strip()
+
+        # Update email dictionary with GPT4All results
+        email["category"] = category
+        email["priority"] = priority
+        email["requires_response"] = requires_response
+
+    # Print categorized emails
+    for email in email_data:
+        print(f"Subject: {email['subject']}")
+        print(f"Sender: {email['sender']}")
+        print(f"Category: {email['category']}")
+        print(f"Priority: {email['priority']}")
+        print(f"Requires Response: {email['requires_response']}")
+        print("-" * 40)
 else:
     print("Error: CLIENT_SECRET_FILE is not set in .env file.")
