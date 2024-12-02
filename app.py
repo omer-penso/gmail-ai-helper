@@ -54,8 +54,9 @@ if client_secret_file:
         print("No new messages.")
     else:
         # Loop through the messages and fetch the subject and sender
-        print(f"Processing {len(messages[:2])} messages...")
-        for message in tqdm(messages[:2], desc="Processing Emails"): 
+        iteration_length = 5
+        print(f"Processing {len(messages[:iteration_length])} messages...")
+        for message in tqdm(messages[:iteration_length], desc="Processing Emails"): 
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
             headers = msg['payload']['headers']
             
@@ -72,15 +73,18 @@ if client_secret_file:
         sender = email["sender"]
 
         # Define prompts
-        category_prompt = f"Categorize this email by what you think fits the most (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Categories: 'University', 'Work Search', 'Shopping', 'Meetings', 'Other'."
-        priority_prompt = f"Rank this email by priority (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Possible priorities: 'Urgent', 'Important', 'Normal'."
+        category_prompt = f"""Categorize this email by what you think fits the most (select just ONE!): Subject: '{subject}', Sender: '{sender}'. 
+                            Categories: 'University', 'Work Search', 'Shopping', 'Meetings', 'Other'
+                            IMPORTANT - write only the category, DONT write any expexplanations."""
+        priority_prompt = f"""Rank this email by priority (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Possible priorities: 'Urgent', 'Important', 'Normal'
+                            IMPORTANT - write only the priority, DONT write any expexplanations."""
         response_prompt = f"Does this email require a response? Subject: '{subject}', Sender: '{sender}'. Answer 'Yes' or 'No'."
 
         # Use GPT4All to generate responses
         with gpt_model.chat_session() as session:
-            category = session.generate(category_prompt).strip()
-            priority = session.generate(priority_prompt).strip()
-            requires_response = session.generate(response_prompt).strip()
+            category = session.generate(category_prompt).strip('"')
+            priority = session.generate(priority_prompt).strip('"')
+            requires_response = session.generate(response_prompt).strip('"')
 
         # Update email dictionary with GPT4All results
         email["category"] = category
