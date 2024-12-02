@@ -1,4 +1,7 @@
 import os
+import redis
+import json
+import hashlib
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -7,12 +10,20 @@ from google.oauth2.credentials import Credentials
 from gpt4all import GPT4All
 from tqdm import tqdm
 
+
 # Load environment variables from .env file
 load_dotenv()
 
 # Initialize GPT4All model
 gpt_model = GPT4All('Meta-Llama-3-8B-Instruct.Q4_0')
 
+# Connect to Redis
+redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
+
+# Function to generate a cache key based on subject and sender
+def generate_cache_key(subject, sender):
+    key = f"email:{subject}:{sender}"
+    return hashlib.sha256(key.encode()).hexdigest()
 
 # Get the path to your credentials.json file
 client_secret_file = os.getenv("CLIENT_SECRET_FILE")
@@ -54,7 +65,7 @@ if client_secret_file:
         print("No new messages.")
     else:
         # Loop through the messages and fetch the subject and sender
-        iteration_length = 5
+        iteration_length = 8
         print(f"Processing {len(messages[:iteration_length])} messages...")
         for message in tqdm(messages[:iteration_length], desc="Processing Emails"): 
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
@@ -72,24 +83,43 @@ if client_secret_file:
         subject = email["subject"]
         sender = email["sender"]
 
-        # Define prompts
-        category_prompt = f"""Categorize this email by what you think fits the most (select just ONE!): Subject: '{subject}', Sender: '{sender}'. 
-                            Categories: 'University', 'Work Search', 'Shopping', 'Meetings', 'Other'
-                            IMPORTANT - write only the category, DONT write any expexplanations."""
-        priority_prompt = f"""Rank this email by priority (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Possible priorities: 'Urgent', 'Important', 'Normal'
-                            IMPORTANT - write only the priority, DONT write any expexplanations."""
-        response_prompt = f"Does this email require a response? Subject: '{subject}', Sender: '{sender}'. Answer 'Yes' or 'No'."
+        # Generate cache key
+        cache_key = generate_cache_key(subject, sender)
+        cached_data = redis_client.get(cache_key)
 
-        # Use GPT4All to generate responses
-        with gpt_model.chat_session() as session:
-            category = session.generate(category_prompt).strip('"')
-            priority = session.generate(priority_prompt).strip('"')
-            requires_response = session.generate(response_prompt).strip('"')
+        if cached_data:
+            print(f"Using cached data for: {subject}")
+            cached_response = json.loads(cached_data)
+            email["category"] = cached_response["category"]
+            email["priority"] = cached_response["priority"]
+            email["requires_response"] = cached_response["requires_response"]
+        else:
+            # Define prompts
+            category_prompt = f"""Categorize this email by what you think fits the most (select just ONE!): Subject: '{subject}', Sender: '{sender}'. 
+                                Categories: 'University', 'Work Search', 'Shopping', 'Meetings', 'Other'
+                                IMPORTANT - write only the category, DONT write any expexplanations."""
+            priority_prompt = f"""Rank this email by priority (select just ONE!): Subject: '{subject}', Sender: '{sender}'. Possible priorities: 'Urgent', 'Important', 'Normal'
+                                IMPORTANT - write only the priority, DONT write any expexplanations."""
+            response_prompt = f"Does this email require a response? Subject: '{subject}', Sender: '{sender}'. Answer 'Yes' or 'No'."
 
-        # Update email dictionary with GPT4All results
-        email["category"] = category
-        email["priority"] = priority
-        email["requires_response"] = requires_response
+            # Use GPT4All to generate responses
+            with gpt_model.chat_session() as session:
+                category = session.generate(category_prompt).strip('"')
+                priority = session.generate(priority_prompt).strip('"')
+                requires_response = session.generate(response_prompt).strip('"')
+
+            # Update email dictionary with GPT4All results
+            email["category"] = category
+            email["priority"] = priority
+            email["requires_response"] = requires_response
+
+            # Cache the response in Redis for 4 hours (14400 seconds)
+            response_data = {
+                "category": category,
+                "priority": priority,
+                "requires_response": requires_response
+            }
+            redis_client.setex(cache_key, 14400, json.dumps(response_data))
 
     # Print categorized emails
     for email in email_data:
