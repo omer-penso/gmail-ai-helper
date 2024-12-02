@@ -3,3 +3,5 @@ __pycache__/
 *.pyc
 .venv/
 .vscode/
+token.json
+client_secret_*.json
