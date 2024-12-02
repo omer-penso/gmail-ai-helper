@@ -54,7 +54,8 @@ if client_secret_file:
         print("No new messages.")
     else:
         # Loop through the messages and fetch the subject and sender
-        for message in messages[:8]:  
+        print(f"Processing {len(messages[:2])} messages...")
+        for message in tqdm(messages[:2], desc="Processing Emails"): 
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
             headers = msg['payload']['headers']
             
@@ -66,7 +67,7 @@ if client_secret_file:
             email_data.append({"subject": subject, "sender": sender})
 
     # Process emails using GPT4All
-    for email in email_data:
+    for email in tqdm(email_data, desc="Categorizing Emails"):
         subject = email["subject"]
         sender = email["sender"]
 
