@@ -2,6 +2,7 @@ import os
 import redis
 import json
 import hashlib
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -65,7 +66,7 @@ if client_secret_file:
         print("No new messages.")
     else:
         # Loop through the messages and fetch the subject and sender
-        iteration_length = 8
+        iteration_length = 15
         print(f"Processing {len(messages[:iteration_length])} messages...")
         for message in tqdm(messages[:iteration_length], desc="Processing Emails"): 
             msg = service.users().messages().get(userId='me', id=message['id']).execute()
@@ -129,5 +130,15 @@ if client_secret_file:
         print(f"Priority: {email['priority']}")
         print(f"Requires Response: {email['requires_response']}")
         print("-" * 40)
+
+    # Create a pie chart for email categories
+    categories = [email['category'] for email in email_data]
+    category_counts = {category: categories.count(category) for category in set(categories)}
+
+    # Plotting the pie chart
+    plt.figure(figsize=(7, 7))
+    plt.pie(category_counts.values(), labels=category_counts.keys(), autopct='%1.1f%%', startangle=90)
+    plt.title('Email Categories Distribution')
+    plt.show()
 else:
     print("Error: CLIENT_SECRET_FILE is not set in .env file.")
