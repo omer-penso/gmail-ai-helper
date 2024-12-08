@@ -19,8 +19,16 @@ load_dotenv()
 # Initialize GPT4All model
 gpt_model = GPT4All('Meta-Llama-3-8B-Instruct.Q4_0')
 
-# Connect to Redis
-redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
+# Connect to Redis with error handling
+try:
+    redis_client = redis.StrictRedis(host='localhost', port=6379, db=0, decode_responses=True)
+    # Test the connection by pinging Redis
+    redis_client.ping()
+    print("Connected to Redis successfully.")
+except redis.ConnectionError as e:
+    print(f"Error: Could not connect to Redis. Details: {e}")
+except Exception as e:
+    print(f"Unexpected error: {e}")
 
 # Function to generate a cache key based on subject and sender
 def generate_cache_key(subject, sender):
