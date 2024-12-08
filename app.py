@@ -3,6 +3,7 @@ import redis
 import json
 import hashlib
 import matplotlib.pyplot as plt
+import collections
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
@@ -131,14 +132,54 @@ if client_secret_file:
         print(f"Requires Response: {email['requires_response']}")
         print("-" * 40)
 
-    # Create a pie chart for email categories
-    categories = [email['category'] for email in email_data]
-    category_counts = {category: categories.count(category) for category in set(categories)}
+    def plot_category_distribution(email_data):
+        categories = [email['category'] for email in email_data]
+        category_counts = {category: categories.count(category) for category in set(categories)}
 
-    # Plotting the pie chart
-    plt.figure(figsize=(7, 7))
-    plt.pie(category_counts.values(), labels=category_counts.keys(), autopct='%1.1f%%', startangle=90)
-    plt.title('Email Categories Distribution')
-    plt.show()
+        plt.figure(figsize=(7, 7))
+        plt.pie(category_counts.values(), labels=category_counts.keys(), autopct='%1.1f%%', startangle=90)
+        plt.title('Email Categories Distribution')
+        plt.show()
+
+    def response_needed_analysis(email_data):
+        requires_response = [email['requires_response'] for email in email_data]
+        response_count = collections.Counter(requires_response)
+
+        labels = ['Requires Response', 'Does Not Require Response']
+        sizes = [response_count.get('Yes', 0), response_count.get('No', 0)]
+
+        plt.figure(figsize=(7, 7))
+        plt.bar(labels, sizes, color=['#ff6666', '#66b3ff'])
+        plt.title('Response Needed Analysis')
+        plt.xlabel('Response Required')
+        plt.ylabel('Count')
+        plt.show()
+
+    def calculate_omer_percentage_subject(email_data):
+        total_emails = len(email_data)
+        omer_emails = sum(1 for email in email_data if 'omer' in email['subject'].lower())  
+        omer_percentage = (omer_emails / total_emails) * 100 if total_emails > 0 else 0 
+        return omer_percentage
+
+
+    def plot_omer_percentage_pie(email_data):
+        omer_percentage = calculate_omer_percentage_subject(email_data)
+        other_percentage = 100 - omer_percentage 
+
+        labels = ['With', 'Without']
+        sizes = [omer_percentage, other_percentage]
+        colors = ['#ff9999','#66b3ff']
+
+        plt.figure(figsize=(7,7))
+        plt.pie(sizes, labels=labels, autopct='%1.1f%%', colors=colors, startangle=90)
+        plt.title('Percentage of Emails with "Omer" in Subject')
+        plt.axis('equal')  
+        plt.show()
+
+    # Call the functions to plot the charts
+    plot_category_distribution(email_data)
+    response_needed_analysis(email_data)
+    plot_omer_percentage_pie(email_data)
+
 else:
     print("Error: CLIENT_SECRET_FILE is not set in .env file.")
